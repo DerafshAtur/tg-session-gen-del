@@ -14,7 +14,11 @@ from telegram.ext import (
 )
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import (
+    SessionPasswordNeededError,
+    PhoneCodeExpiredError,
+    PhoneCodeInvalidError,
+)
 
 load_dotenv()
 
@@ -66,11 +70,15 @@ async def check_rate_limit(update: Update, user_id: int) -> bool:
     """Return False if rate‑limited (and send a message), else True."""
     if rate_limited(user_id):
         remaining = int(RATE_LIMIT - (time.time() - last_attempt[user_id]))
-        await update.callback_query.message.reply_text(
-            f"⏳ Please wait {remaining} seconds before starting a new action."
-        ) if update.callback_query else await update.message.reply_text(
-            f"⏳ Please wait {remaining} seconds before starting a new action."
-        )
+        # If update is a callback query, reply to the message; else normal update
+        if update.callback_query:
+            await update.callback_query.message.reply_text(
+                f"⏳ Please wait {remaining} seconds before starting a new action."
+            )
+        else:
+            await update.message.reply_text(
+                f"⏳ Please wait {remaining} seconds before starting a new action."
+            )
         return False
     update_rate_limit(user_id)
     return True
@@ -210,12 +218,29 @@ async def s_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except SessionPasswordNeededError:
         await update.message.reply_text("🔐 Two‑step verification enabled. Enter your password.")
         return S_PASSWORD
+    except PhoneCodeExpiredError:
+        await client.disconnect()
+        user_data.pop(user_id, None)
+        await update.message.reply_text(
+            "⏰ The verification code has expired.\n"
+            "Please /start again and enter the new code as soon as you receive it."
+        )
+        return ConversationHandler.END
+    except PhoneCodeInvalidError:
+        await client.disconnect()
+        user_data.pop(user_id, None)
+        await update.message.reply_text(
+            "❌ The verification code you entered is invalid.\n"
+            "Please /start again and double‑check the code."
+        )
+        return ConversationHandler.END
     except Exception as e:
         await client.disconnect()
         user_data.pop(user_id, None)
         await update.message.reply_text(f"❌ Login failed: {e}")
         return ConversationHandler.END
 
+    # Success – retrieve session string
     session_str = client.session.save()
     await client.disconnect()
     user_data.pop(user_id, None)
@@ -366,6 +391,22 @@ async def d_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except SessionPasswordNeededError:
         await update.message.reply_text("🔐 Two‑step verification enabled. Enter your password.")
         return D_PASSWORD
+    except PhoneCodeExpiredError:
+        await client.disconnect()
+        user_data.pop(user_id, None)
+        await update.message.reply_text(
+            "⏰ The verification code has expired.\n"
+            "Please /start again and enter the new code as soon as you receive it."
+        )
+        return ConversationHandler.END
+    except PhoneCodeInvalidError:
+        await client.disconnect()
+        user_data.pop(user_id, None)
+        await update.message.reply_text(
+            "❌ The verification code you entered is invalid.\n"
+            "Please /start again and double‑check the code."
+        )
+        return ConversationHandler.END
     except Exception as e:
         await client.disconnect()
         user_data.pop(user_id, None)
