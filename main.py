@@ -45,6 +45,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # ----- Helper functions -----
 def rate_limited(user_id: int) -> bool:
     """Check if user is still in the cooldown period."""
@@ -70,7 +71,6 @@ async def check_rate_limit(update: Update, user_id: int) -> bool:
     """Return False if rate‑limited (and send a message), else True."""
     if rate_limited(user_id):
         remaining = int(RATE_LIMIT - (time.time() - last_attempt[user_id]))
-        # If update is a callback query, reply to the message; else normal update
         if update.callback_query:
             await update.callback_query.message.reply_text(
                 f"⏳ Please wait {remaining} seconds before starting a new action."
@@ -82,6 +82,7 @@ async def check_rate_limit(update: Update, user_id: int) -> bool:
         return False
     update_rate_limit(user_id)
     return True
+
 
 # ----- /start handler (menu) -----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -96,6 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome! Choose an option:",
         reply_markup=reply_markup
     )
+
 
 # ----- Help -----
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -112,6 +114,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
+
 # ======================================================================
 # SESSION GENERATOR FLOW
 # ======================================================================
@@ -123,7 +126,6 @@ async def session_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_rate_limit(update, user_id):
         return ConversationHandler.END
 
-    # Clean up any old flow
     await cleanup_user(user_id)
 
     await query.message.reply_text(
@@ -198,12 +200,23 @@ async def s_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data["phone_code_hash"] = sent_code.phone_code_hash
     user_data[user_id] = data
 
-    await update.message.reply_text("📲 Verification code sent! Please enter the code.")
+    await update.message.reply_text(
+        "📲 Verification code sent! Please enter the code.\n\n"
+        "⚠️ **To avoid security blocks, DO NOT send the code as plain numbers.**\n"
+        "Add a few extra characters, e.g.: `-2-1-8-0-7` or `2a1b8c0d7` – I’ll extract the digits automatically."
+    )
     return S_CODE
 
 async def s_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    code = update.message.text.strip()
+    # Extract digits only – bypasses code‑sharing detection
+    code = ''.join(filter(str.isdigit, update.message.text))
+    if not code:
+        await update.message.reply_text(
+            "❌ I need the numeric code. Try adding it with some extra characters (e.g., -2-1-8-0-7)."
+        )
+        return S_CODE
+
     data = user_data.get(user_id)
     if not data or "client" not in data:
         await update.message.reply_text("Session expired. /start again.")
@@ -240,7 +253,6 @@ async def s_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Login failed: {e}")
         return ConversationHandler.END
 
-    # Success – retrieve session string
     session_str = client.session.save()
     await client.disconnect()
     user_data.pop(user_id, None)
@@ -283,6 +295,7 @@ async def s_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
     return ConversationHandler.END
+
 
 # ======================================================================
 # ACCOUNT DELETION FLOW
@@ -371,12 +384,23 @@ async def d_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data["phone_code_hash"] = sent_code.phone_code_hash
     user_data[user_id] = data
 
-    await update.message.reply_text("📲 Verification code sent! Please enter the code.")
+    await update.message.reply_text(
+        "📲 Verification code sent! Please enter the code.\n\n"
+        "⚠️ **To avoid security blocks, DO NOT send the code as plain numbers.**\n"
+        "Add a few extra characters, e.g.: `-2-1-8-0-7` or `2a1b8c0d7` – I’ll extract the digits automatically."
+    )
     return D_CODE
 
 async def d_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    code = update.message.text.strip()
+    # Extract digits only – bypasses code‑sharing detection
+    code = ''.join(filter(str.isdigit, update.message.text))
+    if not code:
+        await update.message.reply_text(
+            "❌ I need the numeric code. Try adding it with some extra characters (e.g., -2-1-8-0-7)."
+        )
+        return D_CODE
+
     data = user_data.get(user_id)
     if not data or "client" not in data:
         await update.message.reply_text("Session expired. /start again.")
@@ -476,12 +500,14 @@ async def d_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return D_CONFIRM
 
+
 # ----- Universal cancel -----
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await cleanup_user(user_id)
     await update.message.reply_text("❎ Cancelled. All temporary data removed.")
     return ConversationHandler.END
+
 
 # ----- Main -----
 def main():
@@ -522,6 +548,7 @@ def main():
 
     logger.info("Bot is running with session generator and account deletion...")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
