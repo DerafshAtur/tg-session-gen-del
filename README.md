@@ -21,7 +21,7 @@ No personal data is ever stored – everything is held in server memory only dur
 ## 🚀 Quick self‑host guide
 
 1. **Clone the repo**  
-   `git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git`
+   `git clone https://github.com/DerafshAtur/tg-session-gen-del.git`
 
 2. **Install dependencies**  
    `pip install -r requirements.txt`
